@@ -1,0 +1,74 @@
+#!/usr/bin/python3
+import requests
+import shutil
+from distutils.dir_util import copy_tree
+import tempfile
+from requests_html import HTMLSession
+from packaging import version
+import os
+import json
+import dbus
+
+baseurl = 'https://files.teamspeak-services.com/releases/server/'
+serverpath = '/srv/teamspeak3/'
+
+sysbus = dbus.SystemBus()
+systemd = sysbus.get_object('org.freedesktop.systemd1' , '/org/freedesktop/systemd1')
+manager = dbus.Interface(systemd, 'org.freedesktop.systemd1.Manager')
+
+def recursive_chown(path, owner, group):
+    for dirpath, dirnames, filenames in os.walk(path):
+        shutil.chown(dirpath, owner, group)
+        for filename in filenames:
+            shutil.chown(os.path.join(dirpath, filename), owner, group)
+
+def getLatestVersion():
+
+    sess = HTMLSession()
+    version_links = sess.get(baseurl).html.find('pre',first=True).absolute_links
+
+    latest_version = None
+
+    for link in version_links:
+        if latest_version and version.parse(latest_version) > version.parse(link.rsplit('/',1)[-1]):
+            continue
+        versionlink = [item for item in sess.get(link).html.find('pre',first=True).absolute_links if 'teamspeak3-server_linux_amd64' in item]
+        if versionlink:
+            latest_version = link.rsplit('/',1)[-1]
+
+    return latest_version
+
+def getURL(version):
+    return baseurl + version + '/teamspeak3-server_linux_amd64-' + version + '.tar.bz2'
+
+servers = [item for item in os.listdir(serverpath) if os.path.isdir(serverpath + item)]
+latestVer = getLatestVersion()
+for server in servers:
+    print(server)
+    conf = None
+    if os.path.isfile(serverpath + server + '/updater_conf.json'):
+        with open(serverpath + server + '/updater_conf.json', 'r') as confFile:
+            conf = json.load(confFile)
+    else:
+        conf = {'currentVersion':'0.0.0'}
+    print("Cur Version: {} \nLatest Version: {}".format(conf['currentVersion'],latestVer))
+
+    if version.parse(conf['currentVersion']) < version.parse(latestVer):
+        print('updating')
+        manager.StopUnit("teamspeak3@ts3.dhdc.space.service", "replace")
+
+        with tempfile.NamedTemporaryFile(suffix='.tar.bz2', delete=False) as tmp:
+            with tempfile.TemporaryDirectory() as tdir:
+
+                tmp.write(requests.get(getURL(latestVer)).content)
+                shutil.unpack_archive(tmp.name, tdir)
+                copy_tree(tdir + '/teamspeak3-server_linux_amd64/',serverpath + server + '/')
+
+                recursive_chown(serverpath + server + '/', 'ts3', 'ts3')
+                conf['currentVersion'] = latestVer
+                with open(serverpath + server + '/updater_conf.json', 'w') as f:
+                    json.dump(conf, f)
+
+
+        manager.StartUnit("teamspeak3@ts3.dhdc.space.service", "replace")
+

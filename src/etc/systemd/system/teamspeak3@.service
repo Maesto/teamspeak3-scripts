@@ -1,0 +1,15 @@
+[Unit]
+Description= Teamspeak Server %i
+After=syslog.target nss-lookup.target
+
+[Service]
+Environment=LD_LIBRARY_PATH=.
+WorkingDirectory=/srv/teamspeak3/%i/
+ExecStart=/bin/sh /srv/teamspeak3/%i/ts3server_minimal_runscript.sh
+Restart=always
+
+User=ts3
+Group=ts3
+
+[Install]
+WantedBy=multi-user.target
