@@ -14,16 +14,16 @@ This scripts assume 2 things:
 Create your TS3 Servers in /srv/teamspeak3/[servername]/ since the update script doesn't check for a existing installation you probably can just create a folder and run the updater.
 
 Start your server with
-
+```
 systemctl start teamspeak3@[servername].service
-
+```
 For autostart on boot up change "start" to "enable".
 
 Add a line to your root's Crontab similar to this:
-
+```
 # m h  dom mon dow   command
   5 8   *   *   *    /usr/local/bin/updateTS
-
+```
 This will update all the servers at 5:08 AM if a new version is available.
 
 I'm happy for pull requests which might actually make this a turnkey solution. But if you only run 1 Server this is kind of a "set up and forget" kinda thing.
